@@ -4,9 +4,9 @@
 
 | Component | Role | External Access |
 |---|---|---|
-| Personal AI Employee | Core AI agent processing user requests | No — internal only |
-| Google Workspace Integration | Connects AI to Google Docs, Gmail, Calendar | No — outbound only |
-| WhatsApp/Discord Integration | Messaging interface for user interaction | No — outbound only |
+| Personal AI Employee | Core AI agent — triggered via secure API gateway or webhook, not directly exposed | No direct external access |
+| Google Workspace Integration | Connects AI to Google Docs, Gmail, Calendar | No — outbound HTTPS only |
+| WhatsApp/Discord Integration | Messaging interface for user interaction | No — outbound HTTPS only |
 | LLM Service | Language model backend for AI reasoning | No — internal only |
 
 ---
@@ -49,6 +49,9 @@ spec:
         app: ai-employee
     spec:
       serviceAccountName: ai-employee-sa
+      securityContext:
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
       containers:
       - name: ai-employee
         image: ai-employee:latest
@@ -66,6 +69,18 @@ spec:
           limits:
             cpu: "2000m"
             memory: "4Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
 ```
 
 ### Google Workspace Integration
@@ -86,6 +101,9 @@ spec:
         app: google-workspace
     spec:
       serviceAccountName: google-workspace-sa
+      securityContext:
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
       containers:
       - name: google-workspace
         image: google-workspace-integration:latest
@@ -103,6 +121,18 @@ spec:
           limits:
             cpu: "500m"
             memory: "512Mi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8001
+          initialDelaySeconds: 5
+          periodSeconds: 5
 ```
 
 ### WhatsApp/Discord Integration
@@ -123,6 +153,9 @@ spec:
         app: messaging-integration
     spec:
       serviceAccountName: messaging-sa
+      securityContext:
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
       containers:
       - name: messaging-integration
         image: messaging-integration:latest
@@ -140,6 +173,18 @@ spec:
           limits:
             cpu: "500m"
             memory: "512Mi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8002
+          initialDelaySeconds: 5
+          periodSeconds: 5
 ```
 
 ### LLM Service
@@ -160,6 +205,9 @@ spec:
         app: llm-service
     spec:
       serviceAccountName: llm-sa
+      securityContext:
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
       containers:
       - name: llm-service
         image: llm-service:latest
@@ -177,15 +225,30 @@ spec:
           limits:
             cpu: "4000m"
             memory: "8Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9000
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 9000
+          initialDelaySeconds: 10
+          periodSeconds: 5
 ```
 
 ---
 
 ## 3. Services
 
+All components use `ClusterIP` — no direct external exposure.
+The AI Employee is triggered via a secure API gateway or webhook only.
+
 | Component | Service Type | Port | Reason |
 |---|---|---|---|
-| AI Employee | ClusterIP | 8000 | Internal only — orchestrates all other services |
+| AI Employee | ClusterIP | 8000 | Internal only — triggered via API gateway |
 | Google Workspace | ClusterIP | 8001 | Internal only — called by AI Employee |
 | WhatsApp/Discord | ClusterIP | 8002 | Internal only — called by AI Employee |
 | LLM Service | ClusterIP | 9000 | Internal only — called by AI Employee |
@@ -263,17 +326,17 @@ data:
   MAX_CONCURRENT_TASKS: "10"
   REQUEST_TIMEOUT_SECONDS: "30"
   LLM_MODEL: "gpt-4"
+  RATE_LIMIT_RPM: "60"
+  CIRCUIT_BREAKER_ENABLED: "true"
+  RETRY_MAX_ATTEMPTS: "3"
 ```
 
 ---
 
-## 5. Secrets — Security Focus
+## 5. Secrets
 
-This scenario has three external service integrations, each with its own Secret.
-Separating Secrets limits the blast radius — if one key is compromised,
-the others remain safe.
-
-### AI Employee Core Secrets
+Each external integration has its own isolated Secret. Separating Secrets
+limits blast radius — if one key is compromised, others remain safe.
 ```yaml
 apiVersion: v1
 kind: Secret
@@ -288,10 +351,7 @@ type: Opaque
 data:
   INTERNAL_API_KEY: <base64-encoded-value>
   SESSION_SECRET: <base64-encoded-value>
-```
-
-### Google Workspace Secrets
-```yaml
+---
 apiVersion: v1
 kind: Secret
 metadata:
@@ -306,10 +366,7 @@ data:
   GOOGLE_CLIENT_ID: <base64-encoded-value>
   GOOGLE_CLIENT_SECRET: <base64-encoded-value>
   GOOGLE_REFRESH_TOKEN: <base64-encoded-value>
-```
-
-### WhatsApp/Discord Secrets
-```yaml
+---
 apiVersion: v1
 kind: Secret
 metadata:
@@ -323,10 +380,7 @@ type: Opaque
 data:
   WHATSAPP_API_TOKEN: <base64-encoded-value>
   DISCORD_BOT_TOKEN: <base64-encoded-value>
-```
-
-### LLM Service Secrets
-```yaml
+---
 apiVersion: v1
 kind: Secret
 metadata:
@@ -342,12 +396,16 @@ data:
   LLM_ORG_ID: <base64-encoded-value>
 ```
 
-**Secret Security Rules:**
+**Secret Management Rules:**
 - Each external integration has its own isolated Secret
-- Secrets rotate every 60 days (stricter than Plan 1 due to external API exposure)
+- Secrets rotate every 60 days — stricter due to external API exposure
 - All Secrets annotated with expiry date and owner for auditability
 - In production: use HashiCorp Vault with dynamic secret injection
-- Never log Secret values — ensure all services have log sanitization enabled
+
+**Additional Security Practices:**
+- Secrets are injected as environment variables or mounted as volumes
+- Secrets are never logged or exposed in application responses
+- Access is strictly controlled via RBAC resourceNames per component
 
 ---
 
@@ -355,7 +413,6 @@ data:
 
 Strict least-privilege access. Each component can only access its own Secret.
 ```yaml
-# ServiceAccounts
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -380,7 +437,6 @@ metadata:
   name: llm-sa
   namespace: ai-employee
 ---
-# AI Employee Role — reads config and its own secret only
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -409,7 +465,6 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   name: ai-employee-role
 ---
-# Google Workspace Role — reads its own secret only
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -438,7 +493,6 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   name: google-workspace-role
 ---
-# Messaging Role — reads its own secret only
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -467,7 +521,6 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   name: messaging-role
 ---
-# LLM Role — reads its own secret only
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -499,12 +552,42 @@ roleRef:
 
 ---
 
-## 7. Network Policies
+## 7. Network Policies — Zero-Trust Security
 
-Since this is a security-focused scenario, NetworkPolicies restrict which pods
-can talk to which — even within the same namespace.
+Network policies restrict which pods can communicate with which, and
+limit outbound traffic to only required external APIs.
 ```yaml
-# Only AI Employee can call Google Workspace
+# AI Employee — only authorized internal services can communicate with it
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ai-employee-policy
+  namespace: ai-employee
+spec:
+  podSelector:
+    matchLabels:
+      app: ai-employee
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: api-gateway
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: google-workspace
+    - podSelector:
+        matchLabels:
+          app: messaging-integration
+    - podSelector:
+        matchLabels:
+          app: llm-service
+  policyTypes:
+  - Ingress
+  - Egress
+---
+# Google Workspace — only AI Employee can call it, outbound HTTPS only
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -520,9 +603,17 @@ spec:
         matchLabels:
           app: ai-employee
   egress:
-  - to: []   # Allow outbound to Google APIs
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+    ports:
+    - protocol: TCP
+      port: 443
+  policyTypes:
+  - Ingress
+  - Egress
 ---
-# Only AI Employee can call Messaging Integration
+# Messaging Integration — only AI Employee can call it, outbound HTTPS only
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -538,9 +629,17 @@ spec:
         matchLabels:
           app: ai-employee
   egress:
-  - to: []   # Allow outbound to WhatsApp/Discord APIs
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+    ports:
+    - protocol: TCP
+      port: 443
+  policyTypes:
+  - Ingress
+  - Egress
 ---
-# Only AI Employee can call LLM Service
+# LLM Service — only AI Employee can call it, outbound HTTPS only
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -556,33 +655,60 @@ spec:
         matchLabels:
           app: ai-employee
   egress:
-  - to: []   # Allow outbound to LLM API provider
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+    ports:
+    - protocol: TCP
+      port: 443
+  policyTypes:
+  - Ingress
+  - Egress
 ```
+
+**Policy Rules:**
+
+| From | To | Allowed | Reason |
+|---|---|---|---|
+| API Gateway | AI Employee | ✅ | Entry point |
+| AI Employee | Google Workspace | ✅ | Internal call |
+| AI Employee | Messaging Integration | ✅ | Internal call |
+| AI Employee | LLM Service | ✅ | Internal call |
+| Google Workspace | Google APIs (HTTPS:443) | ✅ | Outbound only |
+| Messaging Integration | WhatsApp/Discord (HTTPS:443) | ✅ | Outbound only |
+| LLM Service | LLM Provider (HTTPS:443) | ✅ | Outbound only |
+| Any pod | Any pod (not listed above) | ❌ | Blocked |
+| Any pod | Any outbound port except 443 | ❌ | Prevents data exfiltration |
+
+> **Why restrict egress to port 443 only:**
+> Only HTTPS outbound is allowed. This prevents data exfiltration through
+> non-standard ports and ensures all external communication is encrypted.
 
 ---
 
 ## 8. Inter-Service Communication
 ```
-User Request
+API Gateway / Webhook (secure entry point)
      │
      ▼
 AI Employee (ClusterIP :8000)
      │
      ├──► Google Workspace Svc (ClusterIP :8001)
      │         │
-     │         └──► Google APIs (external outbound)
+     │         └──► Google APIs (HTTPS :443 outbound)
      │
      ├──► Messaging Svc (ClusterIP :8002)
      │         │
-     │         └──► WhatsApp / Discord APIs (external outbound)
+     │         └──► WhatsApp / Discord APIs (HTTPS :443 outbound)
      │
      └──► LLM Service (ClusterIP :9000)
                │
-               └──► LLM Provider API (external outbound)
+               └──► LLM Provider API (HTTPS :443 outbound)
 ```
 
-| From | To | Protocol | Port | Notes |
+| From | To | Protocol | Port | Type |
 |---|---|---|---|---|
+| API Gateway | AI Employee | HTTPS | 8000 | Internal |
 | AI Employee | Google Workspace | HTTP | 8001 | Internal |
 | AI Employee | Messaging Integration | HTTP | 8002 | Internal |
 | AI Employee | LLM Service | HTTP | 9000 | Internal |
@@ -590,11 +716,15 @@ AI Employee (ClusterIP :8000)
 | Messaging Integration | WhatsApp/Discord | HTTPS | 443 | External outbound |
 | LLM Service | LLM Provider | HTTPS | 443 | External outbound |
 
+> **Note:** Only authorized internal services can communicate with the
+> AI Employee, enforced via NetworkPolicies.
+
 ---
 
-## 9. HorizontalPodAutoscaler — AI Employee and LLM Service
+## 9. HorizontalPodAutoscaler
 
-Both the AI Employee and LLM Service handle variable workloads and benefit from autoscaling.
+Both the AI Employee and LLM Service handle variable workloads and
+benefit from autoscaling.
 ```yaml
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -636,90 +766,63 @@ spec:
         type: Utilization
         averageUtilization: 60
 ```
+
 ---
 
 ## 10. Secret Expiry, Compromise Handling and Agent Access Control
 
 ### What Happens When a Secret Expires
-
-Secrets in this deployment are annotated with `secret-expiry-date` and
-`rotation-schedule`. The following process applies when a Secret reaches
-its expiry date:
 ```
 Secret approaches expiry date
         │
         ▼
-Platform team is notified (via monitoring alert or calendar reminder)
+Platform team notified via monitoring alert
         │
         ▼
-New Secret value is generated (new API key requested from provider)
+New key generated at provider (Google, Discord, LLM)
         │
         ▼
-New Secret is created in Kubernetes with updated value
+New Kubernetes Secret created with updated value
         │
         ▼
-Affected pod is restarted to pick up the new Secret
+Affected pod restarted to pick up new Secret
         │
         ▼
-Old Secret is deleted
-        │
-        ▼
-Expiry annotation is updated with new rotation date
+Old Secret deleted — expiry annotation updated
 ```
 
 **Key rules:**
-- Secrets are rotated before expiry — not after
-- Each Secret is rotated independently — rotating one does not affect others
-- In production: use HashiCorp Vault with auto-rotation to eliminate manual steps
-
----
+- Secrets rotated before expiry — not after
+- Each Secret rotated independently — no cascading restarts
+- In production: HashiCorp Vault handles auto-rotation
 
 ### What Happens When a Secret is Compromised
 
-If a Secret is suspected to be leaked or compromised, the following
-immediate response applies:
-
 | Step | Action | Who |
 |---|---|---|
-| 1 | Revoke the compromised key immediately at the provider (Google, Discord, LLM) | Platform team |
-| 2 | Delete the Kubernetes Secret immediately | Platform team |
-| 3 | Generate a new key from the external provider | Platform team |
-| 4 | Create a new Kubernetes Secret with the new value | Platform team |
-| 5 | Restart only the affected pod | Platform team |
-| 6 | Audit logs to identify how the Secret was exposed | Security team |
-| 7 | Review RBAC to ensure no other pod accessed the Secret | Security team |
-
-**Why separate Secrets per integration matter here:**
-If all credentials were in one shared Secret, a single compromise would
-take down all integrations. With separate Secrets, only the compromised
-integration is affected — Google Workspace, WhatsApp/Discord, and LLM
-Service remain fully operational independently.
-
----
+| 1 | Revoke key immediately at provider | Platform team |
+| 2 | Delete Kubernetes Secret immediately | Platform team |
+| 3 | Generate new key from provider | Platform team |
+| 4 | Create new Kubernetes Secret | Platform team |
+| 5 | Restart only affected pod | Platform team |
+| 6 | Audit logs for exposure source | Security team |
+| 7 | Review RBAC — check no other pod accessed it | Security team |
 
 ### Agent Access Control
 
-The Personal AI Employee pod runs under `ai-employee-sa` ServiceAccount
-with strictly limited permissions. Access is controlled at three levels:
-
 **Level 1 — Kubernetes RBAC:**
-- The AI Employee can only read its own Secret (`ai-employee-secrets`)
-- It cannot access Google, Discord or LLM Secrets
-- It cannot create, update or delete any Kubernetes resources
+- AI Employee reads only its own Secret via `resourceNames`
+- Cannot access Google, Discord or LLM Secrets
 
 **Level 2 — NetworkPolicy:**
-- The AI Employee is the only pod allowed to initiate calls to other services
-- No other pod can call the AI Employee directly from outside the namespace
-- All outbound calls to external APIs go through dedicated integration pods
+- Only API Gateway can reach AI Employee
+- AI Employee can only reach its three integration services
 
-**Level 3 — Secret Rotation and Revocation:**
-- If the AI Employee pod is compromised, its ServiceAccount can be
-  immediately disabled by deleting the ServiceAccount token
-- This instantly cuts off all access without affecting other components
-- A new ServiceAccount and token can be issued after investigation
+**Level 3 — Pod Security Context:**
+- All pods run as non-root
+- Privilege escalation is disabled on all containers
 ```yaml
-# Emergency: revoke AI Employee access immediately
-# Delete the ServiceAccount token to cut off all access
+# Emergency: suspend AI Employee access
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -730,13 +833,70 @@ metadata:
     suspended-date: "2025-03-29"
     suspended-reason: "Security investigation"
 ```
+
+---
+
+## 11. Audit and Monitoring
+
+Security maturity requires visibility into all access and activity.
+
+| What is Monitored | How | Why |
+|---|---|---|
+| All API access logs | Kubernetes audit logs | Detect unauthorized access |
+| Secret access events | K8s audit policy on secrets | Alert on unexpected reads |
+| Pod-to-pod traffic | NetworkPolicy + flow logs | Detect policy violations |
+| Failed liveness probes | Prometheus + Alertmanager | Detect service degradation |
+| Unusual egress traffic | Network flow monitoring | Detect data exfiltration |
+| RBAC violations | K8s audit logs | Detect privilege abuse |
+
+**Alerts triggered on:**
+- Secret accessed by unexpected ServiceAccount
+- Pod restarted more than 3 times in 5 minutes
+- Outbound traffic on non-443 ports
+- Failed readiness probe for more than 60 seconds
+
+---
+
+## 12. Advanced Reliability — Rate Limiting, Circuit Breaker and Retry Logic
+
+### Rate Limiting
+The AI Employee enforces a rate limit of 60 requests per minute to prevent
+abuse and protect the LLM Service from overload.
+```yaml
+RATE_LIMIT_RPM: "60"   # configured via ConfigMap
 ```
-**Access reinstatement process:**
-1. Complete security investigation
-2. Rotate all Secrets the AI Employee had access to
-3. Create a new ServiceAccount with a fresh token
-4. Redeploy the AI Employee pod
-5. Monitor logs for 24 hours after reinstatement
+
+### Circuit Breaker
+If the LLM Service fails or becomes unresponsive, the circuit breaker
+trips and returns a fallback response instead of cascading failures
+across the system.
+```
+LLM Service fails 3 times
+        │
+        ▼
+Circuit breaker trips — OPEN state
+        │
+        ▼
+AI Employee returns fallback response to user
+        │
+        ▼
+After 30 seconds — circuit breaker tries again (HALF-OPEN)
+        │
+        ▼
+If LLM recovers → circuit breaker CLOSES — normal operation resumes
+```
+
+### Retry Logic
+All external API calls (Google, Discord, LLM Provider) use retry logic
+with exponential backoff to handle transient failures.
+```yaml
+RETRY_MAX_ATTEMPTS: "3"   # configured via ConfigMap
+```
+
+- Attempt 1 — immediate
+- Attempt 2 — after 1 second
+- Attempt 3 — after 3 seconds
+- After 3 failures — circuit breaker triggers
 
 ---
 
@@ -754,7 +914,14 @@ metadata:
 | Security Measure | Applied To | Details |
 |---|---|---|
 | Separate Secrets | All 4 components | Each has its own isolated Secret |
-| RBAC resourceNames | All 4 components | Each pod can only read its own Secret |
-| NetworkPolicy | All 4 components | Only AI Employee can initiate internal calls |
+| RBAC resourceNames | All 4 components | Each pod reads only its own Secret |
+| NetworkPolicy ingress | All 4 components | Only authorized callers allowed |
+| NetworkPolicy egress | Integration pods | HTTPS port 443 only — no exfiltration |
+| Pod Security Context | All containers | Non-root, no privilege escalation |
 | Secret rotation | All Secrets | Every 60 days with expiry annotations |
-| ServiceAccounts | All 4 components | No shared or default service accounts used |
+| Liveness probes | All components | Auto-restart on crash |
+| Readiness probes | All components | Traffic only to healthy pods |
+| Rate limiting | AI Employee | 60 RPM — prevents abuse |
+| Circuit breaker | LLM Service | Fallback on failure |
+| Retry logic | All external calls | 3 attempts with backoff |
+| Audit logging | All components | Full access and anomaly monitoring |
