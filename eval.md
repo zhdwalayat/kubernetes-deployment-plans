@@ -1,204 +1,480 @@
-# K8 Planning Skill — Eval
+# K8 Planning Skill
 
-This eval tests whether the K8 Planning Skill produces correct and complete
-Kubernetes deployment plans across different application types and security levels.
-
----
-
-## How to Run This Eval
-
-For each test case below:
-1. Provide the input to the K8 Planning Skill
-2. Compare the output against the expected results checklist
-3. Mark each criterion as pass or fail
-4. A passing score is 80% or above per test case
+A reusable skill for generating production-ready Kubernetes deployment plans
+for any application. Provide the required inputs and this skill produces a
+complete, structured plan covering all essential Kubernetes concepts.
 
 ---
 
-## Test Case 1 — Simple 2-Component App (Low Security)
+## When to Use This Skill
 
-**Input:**
-- App name: Blog Platform
-- Components: Frontend, Backend API
-- External access: Frontend only
-- State: No persistent storage
-- Security level: Low
-- External integrations: None
+Use this skill when:
+- Designing microservices-based applications
+- Planning AI/agent-based systems
+- Deploying secure, API-integrated platforms
+- Preparing infrastructure before application development begins
 
-**Expected Output Checklist:**
+---
 
-| Criterion | Expected | Pass/Fail |
+## Step 1: Gather Inputs
+
+Before generating a plan, collect the following information:
+
+| Input | Question to Ask | Example |
 |---|---|---|
-| Namespace | 1 namespace created | |
-| Deployment type | Both use Deployment (stateless) | |
-| Frontend Service | LoadBalancer | |
-| Backend Service | ClusterIP | |
-| ConfigMap | Contains API URL and environment | |
-| Secrets | At least 1 Secret with expiry annotation | |
-| Secret rotation | Every 180 days (Low security) | |
-| RBAC | 2 ServiceAccounts, 2 Roles, 2 RoleBindings | |
-| HPA | Not required (no AI/worker components) | |
-| NetworkPolicy | Not required (Low security) | |
-| Communication diagram | Shows Frontend → Backend | |
-| Summary table | Lists both components with resource limits | |
-
-**Pass threshold: 9/12 criteria**
+| App Name | What is the application called? | AI Task Manager |
+| Components | What services exist? | UI, Backend, Agent |
+| External Access | Which components need public access? | UI only |
+| State | Any persistent storage needed? | No |
+| Security Level | Low / Medium / High | High |
+| External APIs | Any third-party integrations? | Google, Discord |
+| Workload Type | Predictable or variable load? | Variable |
+| Team Access | How many teams or users need access? | 2 teams |
 
 ---
 
-## Test Case 2 — Stateful App with Database (Medium Security)
+## Step 2: Decision Rules
 
-**Input:**
-- App name: Task Tracker
-- Components: Web App, REST API, PostgreSQL Database
-- External access: Web App only
-- State: PostgreSQL needs persistent storage
-- Security level: Medium
-- External integrations: None
+### 2.1 Workload Type — Resource Selection
 
-**Expected Output Checklist:**
-
-| Criterion | Expected | Pass/Fail |
-|---|---|---|
-| Namespace | 1 namespace created | |
-| Web App deployment | Deployment (stateless) | |
-| REST API deployment | Deployment (stateless) | |
-| PostgreSQL deployment | StatefulSet (stateful) | |
-| Web App Service | LoadBalancer | |
-| REST API Service | ClusterIP | |
-| PostgreSQL Service | ClusterIP | |
-| ConfigMap | Contains DB host, port, app config | |
-| DB Secret | Separate Secret for DB credentials | |
-| Secret rotation | Every 90 days (Medium security) | |
-| RBAC | 3 ServiceAccounts, least privilege per component | |
-| PostgreSQL RBAC | Most restricted — only reads its own Secret | |
-| HPA | Not required (no AI/worker components) | |
-| Communication diagram | Web App → REST API → PostgreSQL | |
-| Summary table | All 3 components listed | |
-
-**Pass threshold: 12/15 criteria**
-
----
-
-## Test Case 3 — AI Worker App (Medium Security)
-
-**Input:**
-- App name: AI Content Generator
-- Components: Dashboard UI, Content API, AI Worker
-- External access: Dashboard UI only
-- State: No persistent storage
-- Security level: Medium
-- External integrations: None
-
-**Expected Output Checklist:**
-
-| Criterion | Expected | Pass/Fail |
-|---|---|---|
-| Namespace | 1 namespace created | |
-| All deployments | All use Deployment (stateless) | |
-| Dashboard Service | LoadBalancer | |
-| Content API Service | ClusterIP | |
-| AI Worker Service | ClusterIP | |
-| ConfigMap | Contains service URLs and config | |
-| Secrets | At least 1 Secret with expiry annotation | |
-| Secret rotation | Every 90 days (Medium security) | |
-| RBAC | 3 ServiceAccounts, 3 Roles, 3 RoleBindings | |
-| HPA on AI Worker | Yes — minReplicas 2, maxReplicas ≥ 4 | |
-| HPA CPU threshold | Between 60–75% | |
-| Communication diagram | UI → Content API → AI Worker | |
-| Summary table | All 3 components with HPA noted | |
-
-**Pass threshold: 10/13 criteria**
-
----
-
-## Test Case 4 — High Security App with External Integrations
-
-**Input:**
-- App name: Financial Assistant
-- Components: AI Agent, Payment Service, Notification Service
-- External access: None — internal tool only
-- State: No persistent storage
-- Security level: High
-- External integrations: Payment Service calls Stripe API, Notification calls SendGrid
-
-**Expected Output Checklist:**
-
-| Criterion | Expected | Pass/Fail |
-|---|---|---|
-| Namespace | 1 namespace with security label | |
-| All deployments | All use Deployment (stateless) | |
-| All Services | All ClusterIP (no external access) | |
-| ConfigMap | No credentials — config only | |
-| Stripe Secret | Separate Secret for Stripe API key | |
-| SendGrid Secret | Separate Secret for SendGrid API key | |
-| Agent Secret | Separate Secret for Agent credentials | |
-| Secret rotation | Every 60 days (High security) | |
-| Secret annotations | expiry-date and owner on every Secret | |
-| RBAC resourceNames | Each pod restricted to its own Secret only | |
-| NetworkPolicy | Defined for all 3 components | |
-| NetworkPolicy ingress | Only AI Agent can initiate calls | |
-| NetworkPolicy egress | Payment and Notification allow outbound | |
-| HPA on AI Agent | Yes — handles variable workloads | |
-| Communication diagram | Shows all internal + external connections | |
-| Summary table | Security summary table included | |
-
-**Pass threshold: 13/16 criteria**
-
----
-
-## Test Case 5 — Edge Case: Single Component App
-
-**Input:**
-- App name: Static Portfolio Website
-- Components: Frontend only
-- External access: Yes
-- State: No
-- Security level: Low
-- External integrations: None
-
-**Expected Output Checklist:**
-
-| Criterion | Expected | Pass/Fail |
-|---|---|---|
-| Namespace | 1 namespace created | |
-| Deployment | Single Deployment | |
-| Service | LoadBalancer | |
-| ConfigMap | Minimal — environment config only | |
-| Secret | At least 1 even if minimal | |
-| RBAC | 1 ServiceAccount, 1 Role, 1 RoleBinding | |
-| HPA | Not required | |
-| NetworkPolicy | Not required (Low security) | |
-| Summary table | Single row table | |
-
-**Pass threshold: 7/9 criteria**
-
----
-
-## Overall Skill Evaluation Summary
-
-| Test Case | App Type | Security | Pass Threshold | Result |
-|---|---|---|---|---|
-| 1 | Simple 2-component | Low | 9/12 | |
-| 2 | Stateful with DB | Medium | 12/15 | |
-| 3 | AI Worker | Medium | 10/13 | |
-| 4 | High security + integrations | High | 13/16 | |
-| 5 | Single component | Low | 7/9 | |
-
-**Skill passes overall eval if: 4 out of 5 test cases pass**
-
----
-
-## Key Skill Behaviors Being Tested
-
-| Behavior | Tested In |
+| Condition | Kubernetes Resource |
 |---|---|
-| Chooses StatefulSet for stateful components | Test Case 2 |
-| Chooses Deployment for stateless components | All test cases |
-| Uses LoadBalancer only for public components | All test cases |
-| Separates Secrets per external integration | Test Case 4 |
-| Applies stricter rotation for High security | Test Case 4 |
-| Adds HPA only for AI/worker components | Test Cases 3 and 4 |
-| Adds NetworkPolicy only for High security | Test Case 4 |
-| Uses resourceNames in RBAC for Secret isolation | Test Case 4 |
-| Handles single component edge case cleanly | Test Case 5 |
+| Stateless service | Deployment |
+| Stateful service (DB, storage) | StatefulSet |
+| Node-wide service (logging, monitoring) | DaemonSet |
+| Scheduled job | CronJob |
+
+### 2.2 Service Exposure
+
+| Condition | Service Type |
+|---|---|
+| Public access required | ClusterIP + Ingress (preferred) OR LoadBalancer (basic setup) |
+| Internal only | ClusterIP |
+| Debug or testing only | NodePort |
+
+> **Rule:** Always prefer Ingress over multiple LoadBalancers.
+> Ingress provides centralized routing, SSL termination, and is more
+> cost efficient in production. Use LoadBalancer only for simple or
+> basic cloud setups where Ingress is not available.
+
+### 2.3 Config vs Secret
+
+| Data Type | Resource |
+|---|---|
+| Credentials, tokens, API keys | Secret |
+| URLs, configs, feature flags | ConfigMap |
+
+### 2.4 Secret Rotation Policy
+
+| Security Level | Rotation Frequency |
+|---|---|
+| Low | Every 180 days |
+| Medium | Every 90 days |
+| High | Every 60 days |
+
+### 2.5 Scaling Strategy
+
+| Condition | Action |
+|---|---|
+| AI or agent workload | Add HPA |
+| Unpredictable traffic spikes | Add HPA |
+| Critical service | Use minimum 2 replicas |
+| Heavy compute workload | Increase resource limits |
+
+### 2.6 Security Rules — Mandatory for All Plans
+
+Always apply these regardless of security level:
+- Separate ServiceAccount per component
+- RBAC with least privilege principle
+- Isolated Secrets — no shared credentials across components
+- NetworkPolicies for service-to-service isolation
+- Pod Security Context — runAsNonRoot, no privilege escalation
+- Never deploy resources in the default namespace
+
+### 2.7 Risk and Security Handling
+
+For High security applications, always include:
+- Secret rotation workflow
+- Compromise response plan
+- Audit logging strategy
+- Access revocation procedure
+
+---
+
+## Step 3: Output Template
+
+Use this structure to generate the full plan for any application.
+
+### 1. Namespace
+- Create a dedicated namespace — never use the default namespace
+- Add labels for environment and security level
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: <app-name>
+  labels:
+    environment: production
+    security-level: <low|medium|high>
+```
+
+### 2. Deployments / StatefulSets
+
+For each component define:
+- Type — Deployment (stateless) or StatefulSet (stateful)
+- Replicas — minimum 2 for critical services
+- Resource requests and limits — always set both
+- ConfigMap and Secret references
+- ServiceAccount assignment
+- Liveness and Readiness probes
+- Pod Security Context
+- imagePullPolicy: Always — prevents outdated or vulnerable cached images
+```yaml
+containers:
+- name: <component>
+  image: <image>:latest
+  imagePullPolicy: Always
+  resources:
+    requests:
+      cpu: "<value>"
+      memory: "<value>"
+    limits:
+      cpu: "<value>"
+      memory: "<value>"
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: <port>
+    initialDelaySeconds: 10
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: <port>
+    initialDelaySeconds: 5
+    periodSeconds: 5
+  securityContext:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+```
+
+### 3. Services
+
+For each component:
+- Define Service type — ClusterIP or ClusterIP + Ingress
+- Assign correct ports
+- Justify the choice
+
+| Component | Service Type | Reason |
+|---|---|---|
+| Public component | ClusterIP + Ingress (preferred) OR LoadBalancer (basic setup) | Centralized or direct external access |
+| Internal component | ClusterIP | Internal communication only |
+
+### 4. Ingress — Production Access Layer
+
+Use Ingress for any component requiring external access.
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: <app>-ingress
+  namespace: <namespace>
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  rules:
+  - host: <app>.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: <service-name>
+            port:
+              number: 80
+  tls:
+  - hosts:
+    - <app>.example.com
+    secretName: <tls-secret>
+```
+
+### 5. ConfigMaps
+
+Store all non-sensitive configuration:
+- Service URLs
+- Environment name
+- Feature flags
+- Timeout values
+- Rate limit settings
+
+### 6. Secrets
+
+- One Secret per component or external integration
+- Annotate with expiry date, rotation schedule, and owner
+- Apply rotation schedule based on security level
+- Never store credentials in ConfigMaps or source code
+```yaml
+metadata:
+  annotations:
+    secret-expiry-date: "<date>"
+    rotation-schedule: "every-<n>-days"
+    owner: "<team>"
+```
+
+**Additional Security Practices:**
+- Inject Secrets as environment variables or mounted volumes
+- Never log or expose Secret values in responses
+- Control access strictly via RBAC resourceNames
+
+### 7. RBAC — Roles and RoleBindings
+
+For each component:
+- Create a dedicated ServiceAccount
+- Create a Role with minimum required permissions
+- Use `resourceNames` to restrict Secret access to only that component
+- Bind Role to ServiceAccount via RoleBinding
+```yaml
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get"]
+  resourceNames: ["<component-secret-name>"]
+```
+
+### 8. Network Policies — Zero-Trust Security
+
+Restrict all pod-to-pod communication to only what is necessary.
+```yaml
+# Allow only specific callers into a pod
+ingress:
+- from:
+  - podSelector:
+      matchLabels:
+        app: <allowed-caller>
+
+# Restrict outbound to HTTPS only for external integrations
+egress:
+- to:
+  - ipBlock:
+      cidr: 0.0.0.0/0
+  ports:
+  - protocol: TCP
+    port: 443
+```
+
+> **Why restrict egress to port 443:**
+> Only HTTPS outbound is allowed. This prevents data exfiltration and
+> ensures all external communication is encrypted.
+
+### 9. Inter-Service Communication
+
+- Define which service calls which
+- Draw an ASCII flow diagram
+- Use internal Kubernetes DNS for all internal calls:
+```
+<service-name>.<namespace>.svc.cluster.local
+```
+
+- Add a table: From → To → Protocol → Port → Internal/External
+
+### 10. Scaling and Performance
+
+For AI, worker, or variable traffic components add HPA:
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+spec:
+  minReplicas: 2
+  maxReplicas: <n>
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 65
+```
+
+### 11. Reliability and Health Checks
+
+| Feature | Purpose |
+|---|---|
+| Liveness probe | Restarts crashed containers automatically |
+| Readiness probe | Sends traffic only to healthy pods |
+| Multiple replicas | Eliminates single point of failure |
+| HPA | Handles load spikes automatically |
+| imagePullPolicy: Always | Ensures latest secure image is always used |
+| Pod Security Context | Prevents privilege escalation |
+
+### 12. Security and Risk Handling
+
+For High security applications include all of these:
+
+**Secret Expiry Workflow:**
+```
+Secret approaches expiry
+    │
+    ▼
+Team notified via alert
+    │
+    ▼
+New key generated at provider
+    │
+    ▼
+New Kubernetes Secret created
+    │
+    ▼
+Affected pod restarted
+    │
+    ▼
+Old Secret deleted — annotation updated
+```
+
+**Compromise Response:**
+1. Revoke key at provider immediately
+2. Delete Kubernetes Secret
+3. Generate new key
+4. Create new Secret
+5. Restart affected pod only
+6. Audit logs for exposure source
+7. Review RBAC for unauthorized access
+
+**Access Revocation:**
+- Delete ServiceAccount token to instantly cut off pod access
+- Redeploy with new ServiceAccount after investigation
+
+### 13. Audit and Monitoring
+
+| What | How | Why |
+|---|---|---|
+| API access logs | Kubernetes audit logs | Detect unauthorized access |
+| Secret access | Audit policy on secrets | Alert on unexpected reads |
+| Pod restarts | Prometheus alerts | Detect instability |
+| Egress traffic | Network flow logs | Detect exfiltration |
+
+### 14. Advanced Reliability — Rate Limiting, Circuit Breaker and Retry
+
+**Rate Limiting:** Prevent abuse of AI agents — configure via ConfigMap.
+
+**Circuit Breaker:** If a downstream service fails, trip the circuit and
+return a fallback response instead of cascading failures.
+```
+Service fails 3 times → Circuit OPEN → Fallback response
+After 30s → Circuit HALF-OPEN → Retry
+If recovered → Circuit CLOSED → Normal operation
+```
+
+**Retry Logic:** For external API failures use exponential backoff.
+- Attempt 1 — immediate
+- Attempt 2 — after 1 second
+- Attempt 3 — after 3 seconds
+- After 3 failures — circuit breaker triggers
+
+### 15. Resource Quotas — Optional Advanced
+
+Limit total CPU and memory usage per namespace to prevent any single
+application from exhausting cluster resources. Critical in multi-tenant
+clusters.
+```yaml
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: <app>-quota
+  namespace: <namespace>
+spec:
+  hard:
+    requests.cpu: "4"
+    requests.memory: "8Gi"
+    limits.cpu: "8"
+    limits.memory: "16Gi"
+    pods: "20"
+```
+
+**Why Resource Quotas matter:**
+- Prevents resource exhaustion from one namespace affecting others
+- Enforces cost control in cloud environments
+- Encourages developers to set proper resource requests and limits
+
+---
+
+## Step 4: Example Usage
+
+**Input:**
+- App: Chat Application
+- Components: UI, Backend, Database
+- External Access: UI only
+- State: Database needs persistent storage
+- Security Level: Medium
+- External integrations: None
+
+**Output Decisions:**
+
+| Component | Type | Service | Notes |
+|---|---|---|---|
+| UI | Deployment | ClusterIP + Ingress | Public via Ingress |
+| Backend | Deployment | ClusterIP | Internal only, add HPA |
+| Database | StatefulSet | ClusterIP | Persistent storage |
+
+- Secrets → DB credentials in separate Secret, rotation every 90 days
+- ConfigMaps → API URLs, environment config
+- RBAC → Backend can read DB Secret, UI cannot
+- NetworkPolicy → Only Backend can reach Database
+- HPA → Backend (variable traffic)
+- Liveness + Readiness probes → All components
+- imagePullPolicy: Always → All components
+- No resources in default namespace
+
+---
+
+## Common Mistakes to Avoid
+
+| Mistake | Correct Approach |
+|---|---|
+| Credentials in ConfigMaps | Always use Secrets |
+| One shared Secret for all components | One Secret per component |
+| Default ServiceAccount for all pods | Dedicated ServiceAccount per component |
+| Deploying in default namespace | Always create a dedicated namespace |
+| No resource limits on AI pods | Always set CPU and memory limits |
+| Single replica for critical services | Minimum 2 replicas always |
+| No HPA on AI workloads | Add HPA for any variable load component |
+| No NetworkPolicies | Always define pod-to-pod communication rules |
+| LoadBalancer for every service | Use Ingress for centralized external access |
+| No liveness or readiness probes | Always add health checks |
+| No imagePullPolicy | Set imagePullPolicy: Always on all containers |
+| No secret rotation plan | Define rotation schedule and expiry annotations |
+
+---
+
+## Checklist Before Submitting Any K8 Plan
+
+- [ ] Dedicated namespace with environment labels
+- [ ] No resources deployed in default namespace
+- [ ] Correct resource type — Deployment vs StatefulSet
+- [ ] Ingress used for external access — not LoadBalancer directly
+- [ ] No credentials in ConfigMaps
+- [ ] One Secret per component with expiry annotation
+- [ ] Dedicated ServiceAccount per component
+- [ ] RBAC resourceNames restrict Secret access per pod
+- [ ] Resource requests and limits on all containers
+- [ ] imagePullPolicy: Always on all containers
+- [ ] Liveness and Readiness probes on all containers
+- [ ] Pod Security Context — runAsNonRoot, no privilege escalation
+- [ ] HPA on AI or variable workload components
+- [ ] NetworkPolicies define all allowed communication paths
+- [ ] Egress restricted to port 443 for external integrations
+- [ ] Inter-service communication diagram included
+- [ ] Secret rotation workflow documented
+- [ ] Audit and monitoring strategy included for High security
+- [ ] Resource Quotas defined for namespace-level resource control
+
+---
+
+## Key Advantages of This Skill
+
+- Standardized Kubernetes planning across any project
+- Reduces design errors through structured decision rules
+- Enforces security best practices by default
+- Reusable for both simple and complex systems
+- Covers full production requirements — not just basics
+- Scales from a 2-component app to a complex AI platform
