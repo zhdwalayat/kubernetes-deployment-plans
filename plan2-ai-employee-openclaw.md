@@ -37,7 +37,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ai-employee
-  namespace: ai-employee
+  namespace: ai-employee  ##This deployment handles both WhatsApp and Discord
 spec:
   replicas: 2
   selector:
@@ -346,7 +346,7 @@ limits blast radius — if one key is compromised, others remain safe.
 apiVersion: v1
 kind: Secret
 metadata:
-  name: ai-employee-secrets
+  name: ai-employee-secrets       
   namespace: ai-employee
   annotations:
     secret-expiry-date: "2025-12-31"
