@@ -411,32 +411,33 @@ roleRef:
 Internet
     │
     ▼
-UI Interface  ──────────────────────► Notification Service
-(LoadBalancer :80)                      (ClusterIP :4000)
-    │                                         │
-    ▼                                         ▼
-Backend APIs ◄────────────────────────────────┘
-(ClusterIP :8080)
+UI Interface (LoadBalancer :80)
     │
-    ▼
-Todo Agent
-(ClusterIP :5000)
+    ├──► Backend APIs (ClusterIP :8080)
+    │         │
+    │         └──► Todo Agent (ClusterIP :5000)
+    │
+    └──► Notification Service (ClusterIP :4000)
+               │
+               ├──► Backend APIs (ClusterIP :8080)
+               │
+               └──► UI Interface (ClusterIP :3000)
 ```
 
-| From | To | Protocol | Port |
-|---|---|---|---|
-| User (Internet) | UI Interface | HTTP | 80 |
-| UI Interface | Backend APIs | HTTP | 8080 |
-| UI Interface | Notification Service | HTTP | 4000 |
-| Backend APIs | Todo Agent | HTTP | 5000 |
-| Notification Service | Backend APIs | HTTP | 8080 |
+| From | To | Protocol | Port | Direction |
+|---|---|---|---|---|
+| User (Internet) | UI Interface | HTTP | 80 | Inbound |
+| UI Interface | Backend APIs | HTTP | 8080 | Internal |
+| UI Interface | Todo Agent | HTTP | 5000 | Internal |
+| Todo Agent | Backend APIs | HTTP | 8080 | Internal |
+| Notification Service | Backend APIs | HTTP | 8080 | Internal |
+| Notification Service | UI Interface | HTTP | 3000 | Internal |
 
 All internal calls use Kubernetes DNS:
 `<service-name>.<namespace>.svc.cluster.local`
 
-Example: `http://backend-apis-svc.task-manager.svc.cluster.local:8080`
+Example: `http://notification-svc.task-manager.svc.cluster.local:4000`
 
----
 
 ## 8. HorizontalPodAutoscaler — Todo Agent
 
