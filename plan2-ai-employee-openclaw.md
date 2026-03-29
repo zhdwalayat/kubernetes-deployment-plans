@@ -636,6 +636,107 @@ spec:
         type: Utilization
         averageUtilization: 60
 ```
+---
+
+## 10. Secret Expiry, Compromise Handling and Agent Access Control
+
+### What Happens When a Secret Expires
+
+Secrets in this deployment are annotated with `secret-expiry-date` and
+`rotation-schedule`. The following process applies when a Secret reaches
+its expiry date:
+```
+Secret approaches expiry date
+        │
+        ▼
+Platform team is notified (via monitoring alert or calendar reminder)
+        │
+        ▼
+New Secret value is generated (new API key requested from provider)
+        │
+        ▼
+New Secret is created in Kubernetes with updated value
+        │
+        ▼
+Affected pod is restarted to pick up the new Secret
+        │
+        ▼
+Old Secret is deleted
+        │
+        ▼
+Expiry annotation is updated with new rotation date
+```
+
+**Key rules:**
+- Secrets are rotated before expiry — not after
+- Each Secret is rotated independently — rotating one does not affect others
+- In production: use HashiCorp Vault with auto-rotation to eliminate manual steps
+
+---
+
+### What Happens When a Secret is Compromised
+
+If a Secret is suspected to be leaked or compromised, the following
+immediate response applies:
+
+| Step | Action | Who |
+|---|---|---|
+| 1 | Revoke the compromised key immediately at the provider (Google, Discord, LLM) | Platform team |
+| 2 | Delete the Kubernetes Secret immediately | Platform team |
+| 3 | Generate a new key from the external provider | Platform team |
+| 4 | Create a new Kubernetes Secret with the new value | Platform team |
+| 5 | Restart only the affected pod | Platform team |
+| 6 | Audit logs to identify how the Secret was exposed | Security team |
+| 7 | Review RBAC to ensure no other pod accessed the Secret | Security team |
+
+**Why separate Secrets per integration matter here:**
+If all credentials were in one shared Secret, a single compromise would
+take down all integrations. With separate Secrets, only the compromised
+integration is affected — Google Workspace, WhatsApp/Discord, and LLM
+Service remain fully operational independently.
+
+---
+
+### Agent Access Control
+
+The Personal AI Employee pod runs under `ai-employee-sa` ServiceAccount
+with strictly limited permissions. Access is controlled at three levels:
+
+**Level 1 — Kubernetes RBAC:**
+- The AI Employee can only read its own Secret (`ai-employee-secrets`)
+- It cannot access Google, Discord or LLM Secrets
+- It cannot create, update or delete any Kubernetes resources
+
+**Level 2 — NetworkPolicy:**
+- The AI Employee is the only pod allowed to initiate calls to other services
+- No other pod can call the AI Employee directly from outside the namespace
+- All outbound calls to external APIs go through dedicated integration pods
+
+**Level 3 — Secret Rotation and Revocation:**
+- If the AI Employee pod is compromised, its ServiceAccount can be
+  immediately disabled by deleting the ServiceAccount token
+- This instantly cuts off all access without affecting other components
+- A new ServiceAccount and token can be issued after investigation
+```yaml
+# Emergency: revoke AI Employee access immediately
+# Delete the ServiceAccount token to cut off all access
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ai-employee-sa
+  namespace: ai-employee
+  annotations:
+    access-status: "suspended"
+    suspended-date: "2025-03-29"
+    suspended-reason: "Security investigation"
+```
+```
+**Access reinstatement process:**
+1. Complete security investigation
+2. Rotate all Secrets the AI Employee had access to
+3. Create a new ServiceAccount with a fresh token
+4. Redeploy the AI Employee pod
+5. Monitor logs for 24 hours after reinstatement
 
 ---
 
