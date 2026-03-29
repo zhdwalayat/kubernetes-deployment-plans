@@ -82,6 +82,7 @@ spec:
           initialDelaySeconds: 5
           periodSeconds: 5
 ```
+```
 
 ### Google Workspace Integration
 ```yaml
@@ -134,8 +135,12 @@ spec:
           initialDelaySeconds: 5
           periodSeconds: 5
 ```
+```
+# Handles both WhatsApp and Discord messaging integrations
+# WHATSAPP_API_TOKEN and DISCORD_BOT_TOKEN stored in messaging-secrets
+```
+```
 
-### WhatsApp/Discord Integration
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
