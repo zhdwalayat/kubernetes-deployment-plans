@@ -375,7 +375,7 @@ data:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: messaging-secrets
+  name: messaging-secrets    #Contains both tokens:
   namespace: ai-employee
   annotations:
     secret-expiry-date: "2025-12-31"
@@ -383,7 +383,7 @@ metadata:
     owner: "platform-team"
 type: Opaque
 data:
-  WHATSAPP_API_TOKEN: <base64-encoded-value>
+  WHATSAPP_API_TOKEN: <base64-encoded-value>        #Both WhatsApp and Discord credentials are stored here separately.
   DISCORD_BOT_TOKEN: <base64-encoded-value>
 ---
 apiVersion: v1
